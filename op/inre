@@ -1,0 +1,85 @@
+#!/bin/bash
+
+# 文件：inre
+# 类型：Linux bash 脚本
+# 用途：自动选择包管理器执行安装或卸载软件包
+# ----------
+# 脚本参数：inre "i/r:安装/卸载" "s/n:用sudo/不用sudo" "软件包名称"
+# 脚本返回：0:正常执行 1:执行错误
+# ----------
+# 作者：机电匠(JiDianJiang), also known as Mechatronics Craftsman (MC)
+# 版权：Copyright (c) 2023 机电匠(JiDianJiang)
+# 许可：GNU General Public License v3.0
+# GITHUB：https://github.com/JiDianJiang
+# ----------
+# ----------
+
+# 子程序：信息输出
+# 入参：[信息]
+# 出参：无
+# 返回值：0:正常执行
+echo-msg() { echo -e "$(basename "$0"): ${1}"; return 0; }
+
+# 子程序：错误处理
+# 入参：[错误信息] [非0的异常退出码]
+# 出参：无
+# 返回值：0:正常执行
+error-handle() { echo-msg "Error - ${1}"; exit $2; return 0; }
+
+# 子程序：创建自动安装和卸载软件的命令
+# 入参：[s/n:用sudo/不用sudo] [软件包名称]
+# 出参：install_cmd 安装命令全局变量 / remove_cmd 卸载命令全局变量
+# 返回值：0:找到包管理并创建安装或卸载命令 / 1:没有找到适合的包管理器
+creat-cmd() {
+	local su=""; if [ "$1" == "s" ]; then su="sudo "; fi
+    # 判断使用哪个包管理器(标注'*'表示已测试过)
+    if   command -v apt-get >/dev/null 2>&1;  then # apt-get  * (Debian, Ubuntu, Mint)
+        install_cmd="${su}apt-get install -y $2";    remove_cmd="${su}apt-get remove -y $2"
+    elif command -v yum >/dev/null 2>&1;      then # yum      * (CentOS, Fedora, RHEL)
+        install_cmd="${su}yum install -y $2";        remove_cmd="${su}yum remove -y $2"
+    elif command -v dnf >/dev/null 2>&1;      then # dnf        (Fedora, RHEL)
+        install_cmd="${su}dnf install -y $2";        remove_cmd="${su}dnf remove -y $2"
+    elif command -v pacman >/dev/null 2>&1;   then # pacman     (Arch Linux, Manjaro)
+        install_cmd="${su}pacman -S --noconfirm $2"; remove_cmd="${su}pacman -Rs --noconfirm $2"
+    elif command -v zypper >/dev/null 2>&1;   then # zypper     (openSUSE)
+        install_cmd="${su}zypper install -y $2";     remove_cmd="${su}zypper remove -y $2"
+    elif command -v emerge >/dev/null 2>&1;   then # emerge     (Gentoo)
+        install_cmd="${su}emerge -av $2";            remove_cmd="${su}emerge --unmerge $2"
+    elif command -v apk >/dev/null 2>&1;      then # apk        (Alpine Linux)
+        install_cmd="${su}apk add $2";               remove_cmd="${su}apk del $2"
+    elif command -v urpmi >/dev/null 2>&1;    then # urpmi      (Mandriva, Mageia)
+        install_cmd="${su}urpmi $2";                 remove_cmd="${su}urpme $2"
+    elif command -v aptitude >/dev/null 2>&1; then # aptitude * (Debian, Ubuntu, Mint)
+        install_cmd="${su}aptitude install -y $2";   remove_cmd="${su}aptitude remove -y $2"
+    elif command -v rpm >/dev/null 2>&1;      then # rpm        (Red Hat, SUSE)
+        install_cmd="${su}rpm -ivh $2.rpm";          remove_cmd="${su}rpm -e $2"
+    else return 1; fi # 没有找到适合的包管理器
+    # 找到适合的包管理器
+    return 0
+}
+
+# 检查是否提供了参数 / 退出码:1
+if [ $# -eq 0 ]; then error-handle "Missing arguments." "1"; fi
+# 检查第一个参数 / 退出码:1
+if [[ ! $1 =~ ^[ir]$ ]]; then error-handle "Invalid argument: ${1}. Use i or r." "1"; fi
+# 检查第二个参数 / 退出码:1
+if [[ ! $2 =~ ^[sn]$ ]]; then error-handle "Invalid argument: ${2}. Use s or n." "1"; fi
+# 检查第三个参数 / 退出码:1
+if [ ! -n "$3" ]; then error-handle "Missing package name." "1"; fi
+# 执行安装和卸载
+echo-msg "Starting"
+if creat-cmd "$2" "$3"; then
+    if [ "$1" == "i" ]; then EXE_CMD=$install_cmd; $install_cmd; RET=$?
+    else EXE_CMD=$remove_cmd; $remove_cmd; RET=$?; fi
+    if [ $RET -ne 0 ]; then error-handle "Failed to run '$EXE_CMD'." "1"; fi
+    echo-msg "Success to run '$EXE_CMD'."
+else error-handle "No suitable package manager found." "1"; fi
+echo-msg "Stopped"
+exit 0
+
+# 示例
+#CMD="./inre i s screen"
+#CMD="./inre r n screen"
+#$CMD; RET=$?
+#if [ $RET -eq 0 ]; then echo "Command successfully $RET"
+#else echo "Command failed $RET"; fi

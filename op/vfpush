@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# 文件：vfpush
+# 类型：Linux bash 脚本
+# 用途：视频文件推流(mp4 to rtmp)
+# ----------
+# 脚本参数：vfpush "输入视频文件目录" "输出rtmp推流地址"
+# 脚本返回：0:正常执行 1:执行错误
+# ----------
+# 作者：机电匠(JiDianJiang), also known as Mechatronics Craftsman (MC)
+# 版权：Copyright (c) 2023 机电匠(JiDianJiang)
+# 许可：GNU General Public License v3.0
+# GITHUB：https://github.com/JiDianJiang
+# ----------
+# ----------
+
+# 子程序：信息输出
+# 入参：[信息]
+# 出参：无
+# 返回值：0:正常执行
+echo-msg() { echo -e "$(basename "$0"): ${1}"; return 0; }
+
+# 子程序：错误处理
+# 入参：[错误信息] [非0的异常退出码]
+# 出参：无
+# 返回值：0:正常执行
+error-handle() { echo-msg "Error - ${1}"; exit $2; return 0; }
+
+# ----------
+
+# 检查是否提供了参数 / 退出码:1
+if [ $# -eq 0 ]; then error-handle "Missing arguments." "1"; fi
+# 检查第一个参数 / 退出码:1
+if [ ! -n "$1" ]; then error-handle "Missing mp4 file path." "1"; fi
+# 检查第二个参数 / 退出码:1
+if [ ! -n "$2" ]; then error-handle "Missing rtmp url." "1"; fi
+
+# 子程序：确定继续？
+# 入参：[自定义描述信息]
+# 出参：无
+# 返回值：0:正常执行 1:不再继续
+function sure_continue() {
+    echo -n -e "\n${1} - Quit?[q]:"; read -t 3 -n 1 -r
+    if [[ $REPLY =~ ^[Qq]$ ]]; then echo; read -p "Sure?[y/n]:" -t 3 -n 1 -r
+    if [[ $REPLY =~ ^[Yy]$ ]]; then echo; return 1; fi fi; echo 
+    return 0
+}
+
+# 开始直播推流
+echo-msg "Starting"
+
+# 把输入视频文件目录内的mp4文件名构造成数组 并 检查是否存在mp4文件
+video_files=( $(ls "$1"/*.mp4 2>/dev/null | sort) )
+if [ ${#video_files[@]} -eq 0 ]; then error-handle "No mp4 files found in directory '${1}'." "1"; fi
+
+# 执行直播推流
+index=0; while true; do
+    video="${video_files[$index]}"; index=$(( (index+1) % ${#video_files[@]} ))
+    sure_continue "$(basename "$video") will push"; if [ $? = 1 ];then break; else echo; fi
+    ffmpeg -re -i ${video} -c:v copy -c:a aac -b:a 92k -strict -2 -f flv ${2}
+    RET=$?; if [ $RET -eq 0 ]; then echo -e "\nCommand successfully $RET"; else echo -e "\nCommand failed $RET"; fi
+done
+
+# 结束直播推流
+echo-msg "Stopped"
+exit 0
+
+# 示例
+#CMD="$./vfpush $VIDEO_PATH $RTMP_URL"
+#$CMD; RET=$?
+#if [ $RET -eq 0 ]; then echo "Command successfully $RET"
+#else echo "Command failed $RET"; fi
