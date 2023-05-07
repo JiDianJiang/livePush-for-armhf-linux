@@ -1,0 +1,300 @@
+#!/bin/bash
+
+# 文件：livePush
+# 类型：Linux bash 脚本
+# 用途：mp4 to rtmp直播推流
+# ----------
+# 脚本参数：inre "i/r:安装/卸载" "s/n:用sudo/不用sudo" "软件包名称"
+# 脚本返回：0:正常执行 1:执行错误
+# ----------
+# 作者：机电匠(JiDianJiang), also known as Mechatronics Craftsman (MC)
+# 版权：Copyright (c) 2023 机电匠(JiDianJiang)
+# 许可：GNU General Public License v3.0
+# GITHUB：https://github.com/JiDianJiang
+# ----------
+# ----------
+
+TEXT="
+Note, UTF-8 encoding is being used for the following text.
+
+$(basename "$0") version 1.0.0 https://github.com/JiDianJiang Copyright (c) 2023 机电匠(JiDianJiang)
+
+Author: 机电匠(JiDianJiang), also known as Mechatronics Craftsman (MC)
+System Required: Linux armhf_32
+Release Date: April 2023
+Open source license: GNU General Public License v3.0
+"; echo -e "$TEXT"
+
+# ----------
+
+# 预设全局变量
+THIS_PWD=$PWD; OP_PATH="${THIS_PWD}/op/"; CMD=''; TOTAL_DURATION=0; MAX_BITRATE=0 # 前脚本所在的绝对路径 / 操作脚本路径 / 命令组装 / 目录内总时长 / 目录内最大码率
+VIDEO_PATH=''; RECODE_PATH=''; RECODE_MAXRATE=''; RTMP_URL=''; START_TIME=0 # MP4目录 / 转码存放目录 / 转码后的最大码率 / 推流地址 / 执行启动时间
+
+# 获取当前screen会话ID和别名
+if [ -n "$STY" ]; then SCREEN_ID=$(echo "$STY" | cut -d. -f1); SCREEN_NAME=$(echo "$STY" | cut -d. -f2-)
+else SCREEN_ID=$STY; SCREEN_NAME=""; fi
+
+# ----------
+
+# 子程序：信息输出
+# 入参：[信息]
+# 出参：无
+# 返回值：0:正常执行
+echo-msg() { echo -e "$(basename "$0"): ${1}"; return 0; }
+
+# 子程序：错误处理
+# 入参：[错误信息] [非0的异常退出码]
+# 出参：无
+# 返回值：0:正常执行
+error-handle() { echo-msg "Error - ${1}"; exit $2; return 0; }
+
+# ----------
+
+# 子程序：为操作脚本自动添加可执行属性
+# 入参：无
+# 出参：无
+# 返回值：0:正常执行
+function chmod-x() {
+    local file=''
+    if [ -d "$OP_PATH" ]; then
+        for file in "$OP_PATH"/*; do
+            if [ -f "$file" ] && [ "$(head -n 1 "$file")" = "#!/bin/bash" ] && [ ! -x "$file" ]; then chmod +x "$file"; fi
+        done
+    fi
+    return 0
+}
+
+# 子程序：显示主菜单 并 根据输入执行
+# 入参：无
+# 出参：无
+# 返回值：0:正常执行
+function main_menu() {
+    # 检查 screen ffmpeg是否安装 / 已进入screen会话
+    command -v screen &> /dev/null && echo -e "[ YES ] 环境检查：已安装Screen" || echo -e "[ NO  ] 环境检查：已安装Screen"
+    command -v ffmpeg &> /dev/null && echo -e "[ YES ] 环境检查：已安装FFmpeg" || echo -e "[ NO  ] 环境检查：已安装FFmpeg"
+    [ -n "$SCREEN_ID" ] && echo -e "[ YES ] 环境检查：已进入Screen会话 (${SCREEN_ID}.${SCREEN_NAME})" || echo -e "[ NO  ] 环境检查：已进入Screen会话"
+    # 显示主菜单
+    TEXT="\n可执行的操作：\n1. 安装和卸载Screen\n2. 安装和卸载FFmpeg\n3. 直播推流\n4. 视频转码\nx. 退出\n输入您的选择："
+    echo -n -e "$TEXT"; read -n 1 -r
+    case $REPLY in
+        1)   echo; install_screen;;
+        2)   echo; install_ffmpeg;;
+        3)   echo; live_stream;;
+        4)   echo; video_recode;;
+        x|X) echo ". 退出";;
+        *)   echo ". Error: 无效的选项";;
+    esac
+    return 0
+}
+
+# 子程序：安装和卸载screen
+# 入参：无
+# 出参：无
+# 返回值：0:正常执行
+function install_screen() {
+    # 显示主菜单
+    TEXT="\n可执行的操作：\n1. 安装Screen\n2. 卸载Screen\nx. 退出\n输入您的选择："
+    echo -n -e "$TEXT"; read -n 1 -r
+    case $REPLY in
+        1) echo; CMD="${OP_PATH}inre i s screen"; $CMD; RET=$?
+           if [ $RET -eq 0 ]; then echo-msg "Screen安装成功 (${RET})"; else echo-msg "Screen安装失败 (${RET})"; fi ;;
+        2) echo; CMD="${OP_PATH}inre r s screen"; $CMD; RET=$?
+           if [ $RET -eq 0 ]; then echo-msg "Screen卸载成功 (${RET})"; else echo-msg "Screen卸载失败 (${RET})"; fi ;;
+        x|X) echo ". 取消";;
+        *) echo ". Error: 无效的选项";;
+    esac
+    return 0
+}
+
+# 子程序：安装和卸载ffmpeg
+# 入参：无
+# 出参：无
+# 返回值：0:正常执行
+function install_ffmpeg() {
+    local tar_dir="ffmpeg-4.0.3-armhf-32bit-static"
+    local install_file="${THIS_PWD}/install/${tar_dir}.tar.xz"
+	local -r ffmpeg_install_path=/usr/bin
+    # 显示主菜单
+    TEXT="\n可执行的操作：\n1. 安装FFmpeg\n2. 卸载FFmpeg\nx. 退出\n输入您的选择："
+    echo -n -e "$TEXT"; read -n 1 -r
+    case $REPLY in
+        1) echo; echo-msg "安装中......"; tar -xJf "${install_file}"; cd "${tar_dir}"
+           sudo mv ffmpeg ffprobe qt-faststart ffmpeg-10bit "${ffmpeg_install_path}/"; cd ..; rm -rf "${tar_dir}"; echo-msg "FFmpeg安装成功";;
+        2) echo; echo-msg "卸载中......";
+           sudo rm -f "${ffmpeg_install_path}/ffmpeg" "${ffmpeg_install_path}/ffprobe" "${ffmpeg_install_path}/qt-faststart" "${ffmpeg_install_path}/ffmpeg-10bit"
+           echo-msg "FFmpeg卸载成功";;
+        x|X) echo ". 取消";;
+        *) echo ". Error: 无效的选项";;
+    esac
+    return 0
+}
+
+# 子程序：直播推流
+# 入参：无
+# 出参：无
+# 返回值：0:正常执行
+function live_stream() {
+    echo-msg "直播推流 < 开始 >"
+    # 检查是否在screen的会话中 和 是否安装FFmpeg
+    check_screen_ffmpeg; if [ $? = 1 ];then echo-msg "直播推流 < 取消 >"; return 0; fi
+    # 输入MP4目录(VIDEO_PATH)
+    input_video_path
+    # 输入推流地址(RTMP_URL)
+    input_rtmp_url
+    # 显示mp4文件列表(TOTAL_DURATION / MAX_BITRATE)
+    if ! mp4_file_list "$VIDEO_PATH"; then echo-msg "直播推流 < 取消 >"; return 0; fi
+    # 确定是否继续
+    read -p "以上文件将被直播推流，确定吗？[y/n]：" -n 1 -r; echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then echo-msg "直播推流 < 取消 >"; return 0; fi
+    # 执行
+    START_TIME=$(date +%s) # 启动时间
+    CMD="${OP_PATH}vfpush $VIDEO_PATH $RTMP_URL"; $CMD; RET=$?
+    if [ $RET -ne 0 ]; then echo-msg "直播推流 < 执行异常 > (${RET})"; fi
+    run_time "推流总耗时："
+    # 结束
+    echo-msg "直播推流 < 结束 >"
+    return 0
+}
+
+# 子程序：视频转码
+# 入参：无
+# 出参：无
+# 返回值：0:正常执行
+function video_recode() {
+    echo-msg "视频转码 < 开始 >"
+    # 检查是否在screen的会话中 和 是否安装FFmpeg
+    check_screen_ffmpeg; if [ $? = 1 ];then echo-msg "视频转码 < 取消 >"; return 0; fi
+    # 输入视频文件目录(mp4)(VIDEO_PATH)
+    input_video_path
+    # 输入转码后的存放目录(RECODE_PATH)
+    input_recode_path
+    # 输入转码后的最大码率(RECODE_MAXRATE)
+    input_recode_maxrate
+    # 显示mp4文件列表(TOTAL_DURATION / MAX_BITRATE)
+    if ! mp4_file_list "$VIDEO_PATH"; then echo-msg "视频转码 < 取消 >"; return 0; fi
+    # 确定是否继续
+    read -p "以上文件将被转码，确定吗？[y/n]：" -n 1 -r; echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then echo-msg "视频转码 < 取消 >"; return 0; fi
+    # 执行
+    START_TIME=$(date +%s) # 启动时间
+    CMD="${OP_PATH}vfrecode $VIDEO_PATH $RECODE_PATH $RECODE_MAXRATE"; $CMD; RET=$?
+    if [ $RET -ne 0 ]; then echo-msg "视频转码 < 执行异常 > (${RET})"; fi
+    run_time "转码总耗时："
+    # 结束
+    echo-msg "视频转码 < 结束 >"
+    return 0
+}
+
+# 子程序：计算并打印运行时长
+# 入参：[自定义描述信息]
+# 出参：无
+# 返回值：0:正常执行
+function run_time() {
+    local time_diff=$(( $(date +%s) - START_TIME ))
+	TEXT="+-------------------------------------------- -  -   -"
+    echo -e "${TEXT}\n| ${1}$(printf "%dD %02d:%02d:%02d" $(($time_diff/86400)) $(($time_diff%86400/3600)) $(($time_diff%3600/60)) $(($time_diff%60)))\n${TEXT}"
+    return 0
+}
+
+# 子程序：显示mp4文件列表
+# 入参：[视频文件目录]
+# 出参：TOTAL_DURATION MAX_BITRATE
+# 返回值：0:正常执行 1:目录内没有mp4文件
+function mp4_file_list() {
+    # 把输入视频文件目录内的mp4文件名构造成数组 并 检查是否存在mp4文件
+    local video_files=( $(ls "$1"/*.mp4 2>/dev/null | sort) )
+    if [ ${#video_files[@]} -eq 0 ]; then echo "Error: 在目录'${1}'里没有找到mp4文件"; return 1; fi
+    # 显示mp4文件列表
+    TEXT="+-------------------------------------------- -  -   -"
+    echo -e "${TEXT}\n| Number | Duration | Rate (bps) | File name\n${TEXT}"
+    local index=0; local video bitrate duration sec min hour; TOTAL_DURATION=0; MAX_BITRATE=0
+    for video in "${video_files[@]}"; do index=$(( index+1 ))
+        # 提取码率并获取最大码率
+        bitrate=$(ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of default=noprint_wrappers=1:nokey=1 "$video" | awk '{print $1}')
+        if [ $bitrate -gt $MAX_BITRATE ]; then MAX_BITRATE=$bitrate; fi
+        # 提取播放时长并四舍五入到秒并累加总播放时长
+        duration=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$video")
+        duration=$(printf "%.0f" "$duration"); sec=$((duration%60)); min=$((duration/60%60)); hour=$((duration/3600)); TOTAL_DURATION=$((TOTAL_DURATION + duration))
+        echo -e "| $(printf "%6d\n" $index) | $(printf "%02d:%02d:%02d\n" $hour $min $sec) | $(printf "%10d\n" $bitrate) | $(basename "$video")"
+    done
+    sec=$((TOTAL_DURATION%60)); min=$((TOTAL_DURATION/60%60)); hour=$((TOTAL_DURATION/3600))
+    echo -e "${TEXT}\n| Total duration: $(printf "%04d:%02d:%02d\n" $hour $min $sec) - ${TOTAL_DURATION} s\n|    Max bitrate: ${MAX_BITRATE} bps\n${TEXT}"
+    return 0
+}
+
+# 子程序：输入rtmp推流地址和推流码
+# 入参：无
+# 出参：RTMP_URL
+# 返回值：0:正常执行
+function input_rtmp_url() {
+    while true; do read -p "输入rtmp推流地址和推流码：" -r RTMP_URL
+  	if [[ $RTMP_URL =~ rtmp://.* ]]; then break; else echo -e "格式错误";fi done
+    return 0
+}
+
+# 子程序：输入转码后的最大码率
+# 入参：无
+# 出参：RECODE_MAXRATE
+# 返回值：0:正常执行
+function input_recode_maxrate() {
+    while true; do read -p "输入转码后的最大码率(1-9999 kbps)：" -r RECODE_MAXRATE
+    if ! [[ $RECODE_MAXRATE =~ ^[1-9][0-9]{0,3}$ ]]; then echo -e "格式错误"; else break; fi done
+    return 0
+}
+
+# 子程序：输入视频文件目录(mp4)
+# 入参：无
+# 出参：VIDEO_PATH
+# 返回值：0:正常执行
+function input_video_path() {
+    while true; do read -p "输入视频文件存放目录(mp4)：" -r VIDEO_PATH
+    VIDEO_PATH=$(realpath "$VIDEO_PATH"); VIDEO_PATH=${VIDEO_PATH%/} # 路径规范化 / 去掉末尾斜杠
+    if [[ $VIDEO_PATH == /* ]]; then if [[ -d $VIDEO_PATH ]]; then break; else echo "目录不存在"; fi
+    else echo -e "请输入绝对路径"; fi done
+    return 0
+}
+
+# 子程序：输入转码后的存放目录
+# 入参：无
+# 出参：RECODE_PATH
+# 返回值：0:正常执行
+function input_recode_path() {
+    while true; do read -p "输入转码后mp4存放目录：" -r RECODE_PATH
+    RECODE_PATH=$(realpath "$RECODE_PATH"); RECODE_PATH=${RECODE_PATH%/} # 路径规范化 / 去掉末尾斜杠
+    if [[ $RECODE_PATH == /* ]]; then if [[ -d $RECODE_PATH ]]; then break; else echo "目录不存在"; fi
+    else echo -e "请输入绝对路径"; fi done
+    return 0
+}
+
+# 子程序：检查是否处于screen会话中和是否安装ffmpeg
+# 入参：无
+# 出参：无
+# 返回值：0:正常执行(已在screen会话并已安装ffmpeg) 1:条件不满足
+function check_screen_ffmpeg() {
+  # 检查是否在screen的会话中
+  if [ -n "$SCREEN_ID" ]; then TEXT="当前Screen会话：${SCREEN_ID}.${SCREEN_NAME}\n"
+    TEXT="${TEXT}暂时离开：键入 Ctrl + a d\n返回会话：执行 screen -r ${SCREEN_ID} 或 screen -r ${SCREEN_NAME}\n"
+    TEXT="${TEXT}关闭离开：执行 exit\n"; echo -n -e "$TEXT"
+  else echo -e "Error：没有进入Screen会话！"; echo -e "请执行'screen -S live'进入Screen会话，'live'是会话别名，可以自定义。"; return 1; fi
+  # 检查是否安装FFmpeg
+  if ! command -v ffmpeg &> /dev/null; then echo -e "Error：没有安装FFmpeg！"; return 1; fi
+  # 检查通过
+  return 0
+}
+
+# ----------
+
+# 开始
+echo-msg "Starting"
+
+# 给操作文件自动添加可执行属性
+chmod-x
+
+# 进入主菜单
+main_menu
+
+# 结束
+echo-msg "Stopped"
+echo
+exit 0
