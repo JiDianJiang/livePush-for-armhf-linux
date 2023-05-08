@@ -29,7 +29,7 @@ Open source license: GNU General Public License v3.0
 # ----------
 
 # 预设全局变量
-THIS_PWD=$PWD; OP_PATH="${THIS_PWD}/op/"; CMD=''; TOTAL_DURATION=0; MAX_BITRATE=0 # 前脚本所在的绝对路径 / 操作脚本路径 / 命令组装 / 目录内总时长 / 目录内最大码率
+THIS_PWD=$(dirname "$(readlink -f "$0")"); OP_PATH="${THIS_PWD}/op/"; CMD=''; TOTAL_DURATION=0; MAX_BITRATE=0 # 前脚本所在的绝对路径 / 操作脚本路径 / 命令组装 / 目录内总时长 / 目录内最大码率
 VIDEO_PATH=''; RECODE_PATH=''; RECODE_MAXRATE=''; RTMP_URL=''; START_TIME=0 # MP4目录 / 转码存放目录 / 转码后的最大码率 / 推流地址 / 执行启动时间
 
 # 获取当前screen会话ID和别名
