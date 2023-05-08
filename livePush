@@ -4,7 +4,7 @@
 # 类型：Linux bash 脚本
 # 用途：mp4 to rtmp直播推流
 # ----------
-# 脚本参数：inre "i/r:安装/卸载" "s/n:用sudo/不用sudo" "软件包名称"
+# 脚本参数：无
 # 脚本返回：0:正常执行 1:执行错误
 # ----------
 # 作者：机电匠(JiDianJiang), also known as Mechatronics Craftsman (MC)
@@ -17,7 +17,8 @@
 TEXT="
 Note, UTF-8 encoding is being used for the following text.
 
-$(basename "$0") version 1.0.0 https://github.com/JiDianJiang Copyright (c) 2023 机电匠(JiDianJiang)
+$(basename "$0") v1.0.0-Alpha.27 https://github.com/JiDianJiang Copyright (c) 2023 机电匠(JiDianJiang)
+这是【Alpha】版本，处于开发阶段，仍然需要更多的探索和发现。
 
 Author: 机电匠(JiDianJiang), also known as Mechatronics Craftsman (MC)
 System Required: Linux armhf_32
