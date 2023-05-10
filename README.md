@@ -1,6 +1,8 @@
 # livePush-for-armhf-linux
 无人值守直播推流bash脚本，ARMhf Linux适用。
 
+这是【Alpha】版本，处于开发阶段，仍然需要更多的探索和发现。
+
 ```
 Copyright (c) 2023 机电匠(JiDianJiang)
 
