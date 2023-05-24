@@ -96,6 +96,7 @@ RK30xx系列、RK31xx系列、RK32xx系列、RK33xx系列、RK3368、RK3399
 
 Beta 版本（公测版）获取方式：
 1.B站：发布在‘机电匠的工房’里
+  https://mall.bilibili.com/neul-next/index.html?page=mall-up_itemDetail&noTitleBar=1&from=items_share&msource=items_share&itemsId=1102396023
 2.淘宝：发布在‘机电匠自营店’里
 
 上述发布渠道，可能会有延迟或变更，我们会尽快在这里更新。
